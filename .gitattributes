@@ -1,0 +1,8 @@
+* text=auto
+*.uasset binary
+*.umap binary
+*.pak binary
+*.png binary
+*.sh text eol=lf
+*.py text eol=lf
+*.bat text eol=crlf

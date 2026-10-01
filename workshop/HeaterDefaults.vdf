@@ -1,0 +1,26 @@
+"workshopitem"
+{
+	"appid"		"2489330"
+	"publishedfileid"		"0"
+	"contentfolder"		"E:\modding\whiskerwood-heaterdefaults\workshop\content"
+	"previewfile"		"E:\modding\whiskerwood-heaterdefaults\docs\screenshot.png"
+	"title"		"HeaterDefaults - Choose the default Turn on at temperature"
+	"description"		"[b]Stop clicking every new heater down from 10 °C.[/b]
+
+New Heating Stoves, Bonfires and Radiators start with the [i]Turn on at[/i] temperature you choose in the Mods settings menu, instead of the game's fixed 10 °C.
+
+[h2]Features[/h2]
+[list]
+[*]Setting [i]Heaters - default Turn on at (C)[/i] in the Mods menu: -30 to 30 °C in 5° steps (default 0)
+[*]Applies to Heating Stoves, Bonfires and Radiators built while the mod is active
+[*]Never touches heaters that already exist in your save, or ones you have adjusted yourself
+[*]Uses the game's own Turn on at command, the same as the - / + buttons
+[*]Event-driven: does nothing until a building is finished, so it costs nothing at high game speeds or in big towns
+[/list]
+
+[h2]Source[/h2]
+[url=https://github.com/ringuh/whiskerwood-heaterdefaults]GitHub[/url]
+
+Created using the [url=https://github.com/Whiskerwood-Modding/Whiskerwood-Project]Whiskerwood modkit[/url]."
+	"changenote"		"First release"
+}

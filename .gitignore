@@ -1,0 +1,5 @@
+# build output - copied here only when uploading to the Workshop
+workshop/content/
+*.pak
+tools/out/
+__pycache__/
