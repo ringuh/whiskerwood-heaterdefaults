@@ -1,8 +1,7 @@
 """Generates the Blueprint paste text (T3D) for HeaterDefaults into tools/out/.
 Usage: python tools/heaterdefaults_build.py   (needs the modkit's jmap, see t3d.py)
 Paste each file into the matching asset's event graph (Ctrl+A, Delete, Ctrl+V), compile.
-After pasting BP_MapLoad, set the two "Get All Actors Of Class" nodes to Heater and bonfire
-(class pins that point at game Blueprints paste empty).
+The Heater / bonfire classes are loaded from their path strings, so no dropdowns need setting.
 
 How the mod works (game 0.7.207):
 - Every FueledHeater keeps its "Turn on at" limit as a heat byte. The game default is the
@@ -20,6 +19,7 @@ How the mod works (game 0.7.207):
   * A heater still at the game default gets limit = (C + 30) * 3 + HeatIncrementU8
     (HeatSystem: MinimumTemperature -30, HeatPerDegreeCelsius 3).
   (ModAPI.onBuildingSpawned does not fire for buildings finished via construction in 0.7.207.)
+- Log lines (modlog.txt) are written only when Saved\\mods\\HeaterDefaults\\debug.txt exists and is not empty.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
@@ -51,10 +51,35 @@ def api_call(g, fn, x, y, name=None, **kw):
     return n
 
 
+class _Gate(Node):
+    """Exec block 'if Debug: LogMessage', joined again by a reroute knot. Not a graph node itself."""
+    def __init__(self, entry, exit_):
+        self._e, self._x = entry, exit_; self.name = entry.node.name
+    def __getitem__(self, k):
+        return {'execute': self._e, 'then': self._x}[k]
+
+
 def log(g, x, y, msg_pin=None, msg=None, name='Log'):
+    """Debug-only log line: runs only when the Debug variable is true (debug.txt next to the pak)."""
+    dg = g.get('Debug', BOOL, x - 200, y + 120, name=name + 'DebugGet')
+    br = g.branch(x - 150, y, name + 'IfDebug'); link(dg['Debug'], br['Condition'])
     n = api_call(g, 'LogMessage', x, y, name=name, doPrependDate='true')
     if msg_pin: link(msg_pin, n['Msg'])
     elif msg: n.set('Msg', msg)
+    ex(br, n)
+    k = g.add(BG + 'K2Node_Knot', name + 'Join', [], x + 250, y - 40)
+    k.pin('InputPin', EXEC); k.pin('OutputPin', EXEC, out=True)
+    link(n['then'], k['InputPin']); link(br['else'], k['InputPin'])
+    return _Gate(br['execute'], k['OutputPin'])
+
+
+def class_cast(g, x, y, name):
+    """Cast To Actor Class (K2Node_ClassDynamicCast), impure."""
+    n = g.add(BG + 'K2Node_ClassDynamicCast', name, ['TargetType="%s"' % cls_ref('/Script/Engine.Actor')], x, y)
+    n.pin('execute', EXEC); n.pin('then', EXEC, out=True); n.pin('CastFailed', EXEC, out=True)
+    n.pin('Class', CLS('/Script/CoreUObject.Object'))
+    n.pin('AsActor', CLS('/Script/Engine.Actor'), out=True)
+    n.pin('bSuccess', BOOL, out=True, hidden=True)
     return n
 
 
@@ -138,8 +163,8 @@ link(vals['Array'], reg['Values'])
 ex(bp, reg)
 open(OUT + '/BP_Startup.txt', 'w', encoding='utf-8').write(g.text())
 
-# =========================================================================== BP_MapLoad (v15, heater only, new heaters only, no full scans)
-# Variables: View (UI_HeaterView ref), Known (Actor array), Retries (Integer), KnownBefore (Integer),
+# =========================================================================== BP_MapLoad (v17, heater only, new heaters only, no full scans, debug-gated logs, classes loaded from path)
+# Variables: Debug (Boolean), View (UI_HeaterView ref), Known (Actor array), Retries (Integer), KnownBefore (Integer),
 #            Cur (Actor ref), Built (Actor ref), SingleMode (Boolean), LoadScan (Boolean)
 g = Graph(MAPLOAD)
 VIEW_T = OBJ(VIEWC); ACTOR = OBJ('/Script/Engine.Actor'); GAT = OBJ(GA)
@@ -192,7 +217,6 @@ evT = g.custom_event('OnScanTimer', [], 0, -100)
 b1 = bind(g, api['ReturnValue'], API, 'onLoadingFinished', '/Script/SystemCore', 'ModAPI_OnEvent__DelegateSignature', evL, 400, -1800, 'BindLoaded'); ex(bp, b1)
 b2 = bind(g, api['ReturnValue'], API, 'onConstructionSpawned', '/Script/SystemCore', 'ModAPI_OnActorSpawned__DelegateSignature', evC, 700, -1800, 'BindConstruction'); ex(b1, b2)
 b4 = bind(g, api['ReturnValue'], API, 'onBuildingSpawned', '/Script/SystemCore', 'ModAPI_OnActorSpawned__DelegateSignature', evB, 1000, -1800, 'BindBuilt'); ex(b2, b4)
-l0 = log(g, 1300, -1800, msg='HeaterDefaults ready', name='LogReady'); ex(b4, l0)
 
 # ---- OnConstruction: watch the site
 b3 = bind(g, evC['Actor'], '/Script/Engine.Actor', 'OnDestroyed', '/Script/Engine', 'ActorDestroyedSignature__DelegateSignature', evG, 400, -1000, 'BindSiteGone'); ex(evC, b3)
@@ -207,7 +231,13 @@ bB = g.branch(400, -400, 'BrBuiltIsHeater'); link(is_valid(g, gcB['ReturnValue']
 sb = g.setv('Built', ACTOR, 650, -400, name='RememberBuilt'); link(evB['Actor'], sb['Built']); ex(bB, sb)
 lsB = g.setv('LoadScan', BOOL, 800, -550, value='false', name='MarkBuiltScan'); ex(sb, lsB)
 sm1 = g.setv('SingleMode', BOOL, 900, -400, value='true', name='ModeSingle'); ex(lsB, sm1)
-lsT = g.setv('LoadScan', BOOL, 250, -1300, value='true', name='MarkLoadScan'); ex(evL, lsT)
+# Debug = a debug.txt (any content) exists in Saved\\mods\\HeaterDefaults\\ next to the pak. Published builds ship without it.
+rdf = api_call(g, 'ReadModTextFile', 300, -2300, name='ReadDebugFile', modName='HeaterDefaults', Filename='debug.txt'); ex(evL, rdf)
+dfe = g.call(KSTR + ':IsEmpty', 'DebugFileEmpty', 550, -2150); link(rdf['ReturnValue'], dfe['InString'])
+dfn = g.call(KML + ':Not_PreBool', 'DebugFileThere', 750, -2150); link(dfe['ReturnValue'], dfn['A'])
+sdb = g.setv('Debug', BOOL, 600, -2300, name='SetDebug'); link(dfn['ReturnValue'], sdb['Debug']); ex(rdf, sdb)
+l0 = log(g, 1100, -2300, msg='HeaterDefaults ready', name='LogReady'); ex(sdb, l0)
+lsT = g.setv('LoadScan', BOOL, 250, -1300, value='true', name='MarkLoadScan'); ex(l0, lsT)
 sm0a = g.setv('SingleMode', BOOL, 400, -1300, value='false', name='ModeScanL'); ex(lsT, sm0a)
 lsF = g.setv('LoadScan', BOOL, 250, -100, value='false', name='MarkBuildScan'); ex(evT, lsF)
 sm0b = g.setv('SingleMode', BOOL, 400, -100, value='false', name='ModeScanT'); ex(lsF, sm0b)
@@ -254,16 +284,23 @@ scS = set_cur(g, bg_['Built'], 3600, -650, 'CurFromBuilt'); ex(bm, scS)
 proc_entry_nodes.append(scS)
 
 # class loops: Heater_C, bonfire_C, Radiator_C, each LoopBody -> Cur = element -> PROCESS
-prev = (bm, 'else'); loops = []
+# The class comes from its path string (class pins pointing at game Blueprints paste empty):
+# MakeSoftClassPath -> soft class ref -> LoadClassAsset_Blocking -> Cast To Actor Class -> GetAllActorsOfClass.
+prev = [(bm, 'else')]
 for i, cpath in enumerate(HEATER_CLASSES):
-    ga = g.call('/Script/Engine.GameplayStatics:GetAllActorsOfClass', 'AllOfClass%d' % i, 3200 + 700 * i, -1100, ActorClass=cpath)
+    X = 3200 + 1400 * i
+    scp = g.call(KSL + ':MakeSoftClassPath', 'ClassPath%d' % i, X, -1300, PathString=cpath)
+    scr = g.call(KSL + ':Conv_SoftClassPathToSoftClassRef', 'ClassRef%d' % i, X + 250, -1300); link(scp['ReturnValue'], scr['SoftClassPath'])
+    lca = g.call(KSL + ':LoadClassAsset_Blocking', 'LoadClass%d' % i, X, -1100); link(scr['ReturnValue'], lca['AssetClass'])
+    for n_, pin_ in prev: ex(n_, lca, pin_)
+    cc = class_cast(g, X + 300, -1100, 'AsActorClass%d' % i); link(lca['ReturnValue'], cc['Class']); ex(lca, cc)
+    ga = g.call('/Script/Engine.GameplayStatics:GetAllActorsOfClass', 'AllOfClass%d' % i, X + 600, -1100)
     ga['OutActors'].t = ARR(ACTOR)
-    ex(prev[0], ga, prev[1])
-    lp = g.macro('ForEachLoop', ACTOR, 3500 + 700 * i, -1100, name='HeaterLoop%d' % i); link(ga['OutActors'], lp['Array']); ex(ga, lp, 'then', 'Exec')
-    sc = set_cur(g, lp['Array Element'], 3700 + 700 * i, -900, 'CurFromLoop%d' % i); ex(lp, sc, 'LoopBody')
+    link(cc['AsActor'], ga['ActorClass']); ex(cc, ga)
+    lp = g.macro('ForEachLoop', ACTOR, X + 900, -1100, name='HeaterLoop%d' % i); link(ga['OutActors'], lp['Array']); ex(ga, lp, 'then', 'Exec')
+    sc = set_cur(g, lp['Array Element'], X + 1100, -900, 'CurFromLoop%d' % i); ex(lp, sc, 'LoopBody')
     proc_entry_nodes.append(sc)
-    prev = (lp, 'Completed'); loops.append(lp)
-last_loop = loops[-1]
+    prev = [(lp, 'Completed'), (cc, 'CastFailed')]
 
 # PROCESS body (entry = 'then' of every set_cur)
 X0 = 5800
@@ -313,7 +350,8 @@ kbg = g.get('KnownBefore', INT, 5300, -1350, name='KnownBeforeGet'); link(kbg['K
 rg = g.get('Retries', INT, 5600, -1350, name='RetriesGet')
 rok = g.call(KML + ':Greater_IntInt', 'RetriesLeft', 5800, -1350, B='0'); link(rg['Retries'], rok['A'])
 again = g.call(KML + ':BooleanAND', 'TryAgain', 6000, -1450); link(same_n['ReturnValue'], again['A']); link(rok['ReturnValue'], again['B'])
-ba = g.branch(5800, -1650, 'BrTryAgain'); link(again['ReturnValue'], ba['Condition']); ex(last_loop, ba, 'Completed')
+ba = g.branch(5800, -1650, 'BrTryAgain'); link(again['ReturnValue'], ba['Condition'])
+for n_, pin_ in prev: ex(n_, ba, pin_)
 dec = g.call(KML + ':Subtract_IntInt', 'RetriesMinus1', 6100, -1500, B='1'); link(rg['Retries'], dec['A'])
 sr2 = g.setv('Retries', INT, 6100, -1650, name='UseRetry'); link(dec['ReturnValue'], sr2['Retries']); ex(ba, sr2)
 st2 = set_timer(g, 6400, -1650, 'RetryScanTimer'); ex(sr2, st2)

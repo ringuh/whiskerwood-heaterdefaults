@@ -55,6 +55,8 @@ def prop_type(p):
     elif t == 'TextProperty': r = TEXT
     elif t in ('ObjectProperty', 'WeakObjectProperty'): r = OBJ(p['property_class'])
     elif t == 'ClassProperty': r = CLS(p.get('meta_class') or '/Script/CoreUObject.Object')
+    elif t == 'SoftClassProperty': r = T('softclass', obj=cls_ref(p.get('meta_class') or '/Script/CoreUObject.Object'))
+    elif t == 'SoftObjectProperty': r = T('softobject', obj=cls_ref(p.get('property_class') or '/Script/CoreUObject.Object'))
     elif t == 'StructProperty': r = STRUCT(p['struct'])
     elif t == 'EnumProperty': r = ENUM(p['enum'])
     elif t == 'ByteProperty': r = ENUM(p['enum']) if p.get('enum') else T('byte')

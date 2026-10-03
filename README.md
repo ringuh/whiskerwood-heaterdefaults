@@ -34,8 +34,8 @@ Every heater in Whiskerwood starts with **Turn on at ≤ 10 °C**, and the game 
 
 ## Building from source
 
-1. Set up the official [Whiskerwood modkit](https://github.com/Whiskerwood-Modding/Whiskerwood-Project) (custom UE 5.6 build, see its README).
-2. Copy `Mod/HeaterDefaults/` from this repo to `Content/Mods/HeaterDefaults/` in the modkit project.
+1. Set up the official [Whiskerwood modkit](https://github.com/Whiskerwood-Modding/Whiskerwood-Project) (custom UE 5.8 build, branch `5.8`, see its README).
+2. Copy `Mod/HeaterDefaults/` from this repo to `Content/Mods/HeaterDefaults/` in the modkit project. (Assets saved by the old UE 5.6 modkit crash the 5.8 editor; if that happens, recreate `BP_Startup` / `BP_MapLoad` from `docs/graphs/` as below.)
 3. Open the project, right-click the `HeaterDefaults` folder → **Cook & Install** (Mod Tools). The mod uses pak chunk 8 (`PAL_HeaterDefaults`).
 4. After editing in the editor, run `sync-from-modkit.bat` to copy the changed assets back into `Mod/HeaterDefaults/`, then commit.
    The script assumes the modkit is at `E:\modding\Whiskerwood-Project`; override with `set MODKIT=D:\other\path` first.
@@ -44,8 +44,8 @@ Every heater in Whiskerwood starts with **Turn on at ≤ 10 °C**, and the game 
 
 `python tools/heaterdefaults_build.py` writes fresh paste text into `tools/out/`. It needs the modkit's `Content/DynamicClasses/Whiskerwood-*.jmap.gz`; set `JMAP=...` if it isn't next to this repo. In the asset's event graph: Ctrl+A, Delete, Ctrl+V, then compile. Steps the generator can't reproduce:
 
-- `BP_MapLoad` variables must exist before pasting: `View` (UI Heater View reference), `Known` (Actor array), `Retries` and `KnownBefore` (Integer), `Cur` and `Built` (Actor reference), `SingleMode` and `LoadScan` (Boolean).
-- The two **Get All Actors Of Class** nodes paste with an empty class: set them to **Heater** and **bonfire**.
+- `BP_MapLoad` variables must exist before pasting: `Debug` (Boolean), `View` (UI Heater View reference), `Known` (Actor array), `Retries` and `KnownBefore` (Integer), `Cur` and `Built` (Actor reference), `SingleMode` and `LoadScan` (Boolean).
+- No class dropdowns to set: the Heater and bonfire classes are loaded from their path strings (`LoadClassAsset_Blocking`), because class pins pointing at game Blueprints paste empty.
 - If a red event wire (OnLoaded, OnConstruction, OnBuilt, OnSiteGone → its *Bind Event* node) pastes unconnected, drag it again.
 
 ## How it works
@@ -62,7 +62,9 @@ Every heater in Whiskerwood starts with **Turn on at ≤ 10 °C**, and the game 
   - **Save loaded:** every existing Heating Stove and Bonfire is remembered, and nothing is changed.
   - **`onBuildingSpawned`:** buildings placed instantly, such as the Radiator. The mod handles exactly that building.
   - **`onConstructionSpawned`:** the mod binds that construction site's `OnDestroyed`. When the site disappears (finished or cancelled), a one-shot 1-second timer lists only `Heater_C` and `bonfire_C` actors and handles the ones it hasn't seen yet. If none is new, it retries up to three times. `onBuildingSpawned` doesn't fire for buildings finished through construction in game version 0.7.207.
-- Each heater the mod changes adds one line to `%localappdata%\Whiskerwood\Saved\Logs\modlog.txt`.
+## Debug logging
+
+The mod is silent by default. To see what it does, create `%localappdata%\Whiskerwood\Saved\mods\HeaterDefaults\debug.txt` with any text in it (an empty file counts as off). Then on save load it writes `HeaterDefaults ready`, and one line for every heater it changes, to `%localappdata%\Whiskerwood\Saved\Logs\modlog.txt`. Workshop copies never contain `debug.txt`.
 
 ## Known limitations
 
