@@ -44,7 +44,7 @@ Every heater in Whiskerwood starts with **Turn on at ≤ 10 °C**, and the game 
 
 `python tools/heaterdefaults_build.py` writes fresh paste text into `tools/out/`. It needs the modkit's `Content/DynamicClasses/Whiskerwood-*.jmap.gz`; set `JMAP=...` if it isn't next to this repo. In the asset's event graph: Ctrl+A, Delete, Ctrl+V, then compile. Steps the generator can't reproduce:
 
-- `BP_MapLoad` variables must exist before pasting: `Debug` (Boolean), `View` (UI Heater View reference), `Known` (Actor array), `Retries` and `KnownBefore` (Integer), `Cur` and `Built` (Actor reference), `SingleMode` and `LoadScan` (Boolean).
+- `BP_MapLoad` variables must exist before pasting: `Debug` (Boolean), `View` (UI Heater View reference), `Known` (Actor array), `Retries` and `KnownBefore` (Integer), `Cur` and `Built` (Actor reference), `SingleMode`, `LoadScan` and `Ready` (Boolean).
 - No class dropdowns to set: the Heater and bonfire classes are loaded from their path strings (`LoadClassAsset_Blocking`), because class pins pointing at game Blueprints paste empty.
 - If a red event wire (OnLoaded, OnConstruction, OnBuilt, OnSiteGone → its *Bind Event* node) pastes unconnected, drag it again.
 
@@ -53,24 +53,29 @@ Every heater in Whiskerwood starts with **Turn on at ≤ 10 °C**, and the game 
 | Asset | Role |
 |---|---|
 | `BP_Startup` | Runs once at the main menu and registers the mod option `HeaterDefaults_TurnOnAt`. |
-| `BP_MapLoad` | Runs when a save loads. It binds the mod API events and handles new heaters (below). |
+| `BP_MapLoad` | Runs when a game starts or a save loads. It binds the mod API events and handles new heaters (below). |
 | `PAL_HeaterDefaults` | Primary Asset Label that puts the mod into its own pak chunk. |
 
 - A heater's *Turn on at* limit is stored per heater (`FueledHeater`), and the 10 °C default comes from global heat settings, not a data table, so a data-table mod can't change it.
 - The heater window class (`UI_HeaterView`) accepts a `setAutopauseLimit` action with an exact value. `BP_MapLoad` keeps one invisible `UI_HeaterView` and points its `Context` at a heater with `SetObjectPropertyByName` (the property isn't Blueprint-writable). It reads `CalcHudState` (current value, and whether it differs from the default), then sends the action. The value is `(°C + 30) × 3 + HeatIncrementU8`.
 - **When the mod runs:**
-  - **Save loaded:** every existing Heating Stove and Bonfire is remembered, and nothing is changed.
+  - **Game started / save loaded:** every existing Heating Stove and Bonfire is remembered, and nothing is changed. This runs at `BeginPlay` (a new game doesn't send `onLoadingFinished` to the mod) and again at `onLoadingFinished` (in a loaded save the buildings may not exist yet at `BeginPlay`).
   - **`onBuildingSpawned`:** buildings placed instantly, such as the Radiator. The mod handles exactly that building.
   - **`onConstructionSpawned`:** the mod binds that construction site's `OnDestroyed`. When the site disappears (finished or cancelled), a one-shot 1-second timer lists only `Heater_C` and `bonfire_C` actors and handles the ones it hasn't seen yet. If none is new, it retries up to three times. `onBuildingSpawned` doesn't fire for buildings finished through construction in game version 0.7.207.
 ## Debug logging
 
-The mod is silent by default. To see what it does, create `%localappdata%\Whiskerwood\Saved\mods\HeaterDefaults\debug.txt` with any text in it (an empty file counts as off). Then on save load it writes `HeaterDefaults ready`, and one line for every heater it changes, to `%localappdata%\Whiskerwood\Saved\Logs\modlog.txt`. Workshop copies never contain `debug.txt`.
+The mod is silent by default. To see what it does, create `%localappdata%\Whiskerwood\Saved\mods\HeaterDefaultsConfig\debug.txt` with any text in it (an empty file counts as off). Then when a game starts or a save loads it writes `HeaterDefaults ready`, and one line for every heater it changes, to `%localappdata%\Whiskerwood\Saved\Logs\modlog.txt`. It has its own folder because Cook & Install and Workshop updates replace the mod's folder; Workshop copies never contain it.
 
 ## Known limitations
 
 - The heater window's *reset* button still returns to the game's 10 °C; a mod can't change where it points.
 - Changing the setting applies only to heaters built after the change.
 - A heater type added in a future game version needs adding to the class list in `BP_MapLoad`.
+
+## Version history
+
+- **1.1** – works properly in a new game: heaters that came with the map are remembered at start and left alone (before, only loaded saves did this). Debug switch moved to `HeaterDefaultsConfig\debug.txt`.
+- **1.0** – first release (re-uploaded with `EngineVersion 5.8` so the game loads it).
 
 ## Credits
 

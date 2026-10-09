@@ -1,6 +1,7 @@
 {
 	"Name": "HeaterDefaults",
 	"Description": "Newly built Heating Stoves, Bonfires and Radiators start with your own 'Turn on at' temperature instead of the game's 10 C. Set it in the Mods settings menu.",
-	"Version": "1.0",
-	"CreatedBy": "rinku"
+	"Version": "1.1",
+	"CreatedBy": "rinku",
+	"EngineVersion": "5.8"
 }

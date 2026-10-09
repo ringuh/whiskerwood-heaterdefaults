@@ -22,5 +22,5 @@ New Heating Stoves, Bonfires and Radiators start with the [i]Turn on at[/i] temp
 [url=https://github.com/ringuh/whiskerwood-heaterdefaults]GitHub[/url]
 
 Created using the [url=https://github.com/Whiskerwood-Modding/Whiskerwood-Project]Whiskerwood modkit[/url]."
-	"changenote"		"First release"
+	"changenote"		"1.1: Works properly in a new game too: heaters that came with the map are left alone, as in loaded saves."
 }

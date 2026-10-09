@@ -11,7 +11,8 @@ How the mod works (game 0.7.207):
   Context. It sends the same sim action as the window's - / + buttons. Context is not
   Blueprint-writable, so it is set with SetObjectPropertyByName.
 - BP_MapLoad, no tick and no looping timer:
-  * onLoadingFinished: remembers every existing Heating Stove / Bonfire (changes nothing).
+  * BeginPlay and onLoadingFinished: remember every existing Heating Stove / Bonfire (changes nothing).
+    BeginPlay covers new games (onLoadingFinished doesn't reach BP_MapLoad there).
   * onBuildingSpawned (instantly placed buildings, e.g. the Radiator): handles that one actor.
   * onConstructionSpawned: binds the site's OnDestroyed; when the site goes (finished or
     cancelled) a one-shot 1 s timer lists only Heater_C and bonfire_C actors and handles the
@@ -19,7 +20,7 @@ How the mod works (game 0.7.207):
   * A heater still at the game default gets limit = (C + 30) * 3 + HeatIncrementU8
     (HeatSystem: MinimumTemperature -30, HeatPerDegreeCelsius 3).
   (ModAPI.onBuildingSpawned does not fire for buildings finished via construction in 0.7.207.)
-- Log lines (modlog.txt) are written only when Saved\\mods\\HeaterDefaults\\debug.txt exists and is not empty.
+- Log lines (modlog.txt) are written only when Saved\\mods\\HeaterDefaultsConfig\\debug.txt exists and is not empty.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
@@ -165,7 +166,7 @@ open(OUT + '/BP_Startup.txt', 'w', encoding='utf-8').write(g.text())
 
 # =========================================================================== BP_MapLoad (v17, heater only, new heaters only, no full scans, debug-gated logs, classes loaded from path)
 # Variables: Debug (Boolean), View (UI_HeaterView ref), Known (Actor array), Retries (Integer), KnownBefore (Integer),
-#            Cur (Actor ref), Built (Actor ref), SingleMode (Boolean), LoadScan (Boolean)
+#            Cur (Actor ref), Built (Actor ref), SingleMode (Boolean), LoadScan (Boolean), Ready (Boolean) <- 1.1
 g = Graph(MAPLOAD)
 VIEW_T = OBJ(VIEWC); ACTOR = OBJ('/Script/Engine.Actor'); GAT = OBJ(GA)
 HEATER_CLASSES = ['/Game/GridActors/Heater.Heater_C', '/Game/GridActors/bonfire.bonfire_C']  # Radiators arrive via onBuildingSpawned
@@ -231,13 +232,22 @@ bB = g.branch(400, -400, 'BrBuiltIsHeater'); link(is_valid(g, gcB['ReturnValue']
 sb = g.setv('Built', ACTOR, 650, -400, name='RememberBuilt'); link(evB['Actor'], sb['Built']); ex(bB, sb)
 lsB = g.setv('LoadScan', BOOL, 800, -550, value='false', name='MarkBuiltScan'); ex(sb, lsB)
 sm1 = g.setv('SingleMode', BOOL, 900, -400, value='true', name='ModeSingle'); ex(lsB, sm1)
-# Debug = a debug.txt (any content) exists in Saved\\mods\\HeaterDefaults\\ next to the pak. Published builds ship without it.
-rdf = api_call(g, 'ReadModTextFile', 300, -2300, name='ReadDebugFile', modName='HeaterDefaults', Filename='debug.txt'); ex(evL, rdf)
+# ---- Startup (1.1): a NEW game doesn't deliver onLoadingFinished to BP_MapLoad, so BeginPlay (after the binds)
+#      and OnLoaded both come here. First time (Ready false): Ready = true, debug switch, "ready" log. Every time:
+#      the remember-only load scan (records existing heaters, changes nothing). It runs again at onLoadingFinished on
+#      purpose: at a save load BeginPlay may come before the save's buildings exist, and a heater missing from Known
+#      would be changed by the next construction scan. Remembering twice is harmless (Known has no duplicates).
+gr = g.branch(-300, -2300, 'BrReady'); link(g.get('Ready', BOOL, -450, -2150, name='ReadyGet')['Ready'], gr['Condition'])
+ex(b4, gr); ex(evL, gr)
+srd = g.setv('Ready', BOOL, -50, -2300, value='true', name='SetReady'); ex(gr, srd, 'else')
+# Debug = Saved\\mods\\HeaterDefaultsConfig\\debug.txt (any text). ReadModTextFile adds '.txt' itself.
+rdf = api_call(g, 'ReadModTextFile', 300, -2300, name='ReadDebugFile', modName='HeaterDefaultsConfig', Filename='debug'); ex(srd, rdf)
 dfe = g.call(KSTR + ':IsEmpty', 'DebugFileEmpty', 550, -2150); link(rdf['ReturnValue'], dfe['InString'])
 dfn = g.call(KML + ':Not_PreBool', 'DebugFileThere', 750, -2150); link(dfe['ReturnValue'], dfn['A'])
 sdb = g.setv('Debug', BOOL, 600, -2300, name='SetDebug'); link(dfn['ReturnValue'], sdb['Debug']); ex(rdf, sdb)
 l0 = log(g, 1100, -2300, msg='HeaterDefaults ready', name='LogReady'); ex(sdb, l0)
 lsT = g.setv('LoadScan', BOOL, 250, -1300, value='true', name='MarkLoadScan'); ex(l0, lsT)
+ex(gr, lsT)   # already set up: only the remember-only scan
 sm0a = g.setv('SingleMode', BOOL, 400, -1300, value='false', name='ModeScanL'); ex(lsT, sm0a)
 lsF = g.setv('LoadScan', BOOL, 250, -100, value='false', name='MarkBuildScan'); ex(evT, lsF)
 sm0b = g.setv('SingleMode', BOOL, 400, -100, value='false', name='ModeScanT'); ex(lsF, sm0b)
